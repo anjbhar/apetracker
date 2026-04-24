@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
+  FlatList,
   RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -21,69 +22,64 @@ interface StockData {
 }
 
 interface ApiResponse {
-  count: number;
-  pages: number;
-  current_page: number;
   results: StockData[];
 }
 
+type Filter = 'all-stocks' | 'all-crypto' | 'all';
+
+async function fetchSentiment(filter: Filter, signal?: AbortSignal): Promise<StockData[]> {
+  const response = await fetch(`https://apewisdom.io/api/v1.0/filter/${filter}/page/1`, {
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  const json: ApiResponse = await response.json();
+  return json.results ?? [];
+}
+
 export default function HomeScreen() {
-  const [data, setData] = useState<StockData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all-stocks' | 'all-crypto' | 'all'>('all-stocks');
+  const [filter, setFilter] = useState<Filter>('all-stocks');
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const fetchData = async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      
-      const response = await fetch(
-        `https://apewisdom.io/api/v1.0/filter/${filter}/page/1`
-      );
-      const json: ApiResponse = await response.json();
-      setData(json.results);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const {
+    data = [],
+    error,
+    isPending,
+    isFetching,
+    refetch,
+  } = useQuery<StockData[], Error>({
+    queryKey: ['sentiment', filter],
+    queryFn: ({ signal }) => fetchSentiment(filter, signal),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [filter]);
+  const toNumber = (value: string) => Number.parseInt(value, 10) || 0;
 
   const getMentionChange = (current: string, previous: string) => {
-    const curr = parseInt(current, 10);
-    const prev = parseInt(previous, 10);
-    const change = curr - prev;
-    
-    if (change > 0) return `+${change}`;
-    if (change < 0) return `${change}`;
-    return '0';
+    return toNumber(current) - toNumber(previous);
   };
 
   const getRankChange = (current: string, previous: string) => {
-    const curr = parseInt(current, 10);
-    const prev = parseInt(previous, 10);
-    const change = prev - curr; // Lower rank is better, so invert
-    
-    if (change > 0) return { text: `↑${change}`, color: '#4ade80' };
-    if (change < 0) return { text: `↓${Math.abs(change)}`, color: '#ef4444' };
-    return { text: '−', color: isDark ? '#9ca3af' : '#6b7280' };
+    const change = toNumber(previous) - toNumber(current); // Lower rank is better, so invert.
+
+    if (change > 0) {
+      return { text: `+${change}`, color: '#4ade80' };
+    }
+    if (change < 0) {
+      return { text: `${change}`, color: '#ef4444' };
+    }
+    return { text: '0', color: isDark ? '#9ca3af' : '#6b7280' };
   };
 
   const renderItem = ({ item }: { item: StockData }) => {
     const rankChange = getRankChange(item.rank.toString(), item.rank_24h_ago);
     const mentionChange = getMentionChange(item.mentions, item.mentions_24h_ago);
-    
+
     return (
       <View style={[styles.card, isDark ? styles.cardDark : styles.cardLight]}>
         <View style={styles.rankContainer}>
@@ -94,17 +90,17 @@ export default function HomeScreen() {
             {rankChange.text}
           </Text>
         </View>
-        
+
         <View style={styles.mainContent}>
           <View style={styles.tickerNameContainer}>
-            <Text 
+            <Text
               style={[styles.ticker, isDark ? styles.textDark : styles.textLight]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
               {item.ticker}
             </Text>
-            <Text 
+            <Text
               style={[styles.name, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}
               numberOfLines={1}
               ellipsizeMode="tail"
@@ -112,43 +108,34 @@ export default function HomeScreen() {
               {item.name}
             </Text>
           </View>
-          
+
           <View style={styles.statsContainer}>
             <View style={styles.stat}>
-              <Text 
+              <Text
                 style={[styles.statLabel, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}
                 numberOfLines={1}
               >
                 Mentions
               </Text>
-              <Text 
-                style={[styles.statValue, isDark ? styles.textDark : styles.textLight]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.statValue, isDark ? styles.textDark : styles.textLight]} numberOfLines={1}>
                 {item.mentions}
               </Text>
               <Text
-                style={[
-                  styles.statChange,
-                  { color: parseInt(mentionChange) >= 0 ? '#4ade80' : '#ef4444' },
-                ]}
+                style={[styles.statChange, { color: mentionChange >= 0 ? '#4ade80' : '#ef4444' }]}
                 numberOfLines={1}
               >
-                {mentionChange}
+                {mentionChange > 0 ? `+${mentionChange}` : `${mentionChange}`}
               </Text>
             </View>
-            
+
             <View style={styles.stat}>
-              <Text 
+              <Text
                 style={[styles.statLabel, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}
                 numberOfLines={1}
               >
                 Upvotes
               </Text>
-              <Text 
-                style={[styles.statValue, isDark ? styles.textDark : styles.textLight]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.statValue, isDark ? styles.textDark : styles.textLight]} numberOfLines={1}>
                 {item.upvotes}
               </Text>
             </View>
@@ -158,7 +145,11 @@ export default function HomeScreen() {
     );
   };
 
-  if (loading) {
+  const isInitialLoading = isPending && data.length === 0;
+  const errorMessage =
+    error instanceof Error ? error.message : 'Unable to load sentiment data right now.';
+
+  if (isInitialLoading) {
     return (
       <View style={[styles.container, isDark ? styles.containerDark : styles.containerLight]}>
         <ActivityIndicator size="large" color={isDark ? '#fff' : '#000'} />
@@ -187,7 +178,7 @@ export default function HomeScreen() {
             Stocks
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[
             styles.filterButton,
@@ -206,7 +197,7 @@ export default function HomeScreen() {
             Crypto
           </Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={[
             styles.filterButton,
@@ -226,19 +217,48 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-      
+
+      {isFetching && !isManualRefreshing ? (
+        <View style={styles.updatingRow}>
+          <ActivityIndicator size="small" color={isDark ? '#f9fafb' : '#111827'} />
+          <Text style={[styles.updatingText, isDark ? styles.textDark : styles.textLight]}>Updating...</Text>
+        </View>
+      ) : null}
+
+      {error ? (
+        <View style={[styles.errorBanner, isDark ? styles.errorBannerDark : styles.errorBannerLight]}>
+          <Text style={[styles.errorText, isDark ? styles.textDark : styles.textLight]}>
+            Could not load data. {errorMessage}
+          </Text>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <FlatList
         data={data}
         renderItem={renderItem}
         keyExtractor={(item) => `${item.ticker}-${item.rank}`}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchData(true)}
+            refreshing={isManualRefreshing}
+            onRefresh={async () => {
+              setIsManualRefreshing(true);
+              await refetch();
+              setIsManualRefreshing(false);
+            }}
             tintColor={isDark ? '#fff' : '#000'}
           />
         }
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyStateText, isDark ? styles.textSecondaryDark : styles.textSecondaryLight]}>
+              No entries found for this filter.
+            </Text>
+          </View>
+        }
       />
     </View>
   );
@@ -279,6 +299,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b82f6',
     borderColor: '#3b82f6',
   },
+  updatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  updatingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   filterText: {
     fontSize: 14,
     fontWeight: '600',
@@ -286,9 +317,41 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#fff',
   },
+  errorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  errorBannerLight: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
+  },
+  errorBannerDark: {
+    backgroundColor: '#3f1d1d',
+    borderColor: '#7f1d1d',
+  },
+  errorText: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3b82f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   listContent: {
     padding: 16,
     paddingTop: 8,
+    flexGrow: 1,
   },
   card: {
     flexDirection: 'row',
@@ -365,6 +428,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 24,
+  },
+  emptyStateText: {
+    fontSize: 14,
+  },
   textLight: {
     color: '#111827',
   },
@@ -378,4 +450,3 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
 });
-

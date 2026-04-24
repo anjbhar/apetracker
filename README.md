@@ -52,7 +52,16 @@ This app tracks mentions across popular stock and crypto discussion boards inclu
 - **Framework**: Expo / React Native
 - **Language**: TypeScript
 - **Navigation**: Expo Router
+- **Data Fetching**: TanStack Query (`@tanstack/react-query`) + native `fetch`
 - **Styling**: React Native StyleSheet
+
+## Data Fetching
+
+This app uses **TanStack Query** for API state management and caching.
+
+- Query client is configured in `app/_layout.tsx`
+- Tracker data query is implemented in `app/(tabs)/index.tsx`
+- API endpoint: `https://apewisdom.io/api/v1.0/filter/{filter}/page/1`
 
 ## Scripts
 

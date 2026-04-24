@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import type { ComponentProps } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
@@ -28,7 +29,7 @@ export default function TabLayout() {
           title: 'ApeTracker',
           tabBarLabel: 'Tracker',
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="chart-line" color={color} size={size} />
+            <TabBarIcon name="trending-up" color={color} size={size} />
           ),
         }}
       />
@@ -38,7 +39,7 @@ export default function TabLayout() {
           title: 'About',
           tabBarLabel: 'About',
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="information-circle" color={color} size={size} />
+            <TabBarIcon name="information-circle-outline" color={color} size={size} />
           ),
         }}
       />
@@ -46,17 +47,15 @@ export default function TabLayout() {
   );
 }
 
-// Simple icon component using Unicode symbols
-function TabBarIcon({ name }: { name: string; color: string; size: number }) {
-  const icons: { [key: string]: string } = {
-    'chart-line': '📈',
-    'information-circle': 'ℹ️',
-  };
-  
-  return (
-    <Text style={{ fontSize: 24 }}>
-      {icons[name] || '•'}
-    </Text>
-  );
+function TabBarIcon({
+  name,
+  color,
+  size,
+}: {
+  name: ComponentProps<typeof Ionicons>['name'];
+  color: string;
+  size: number;
+}) {
+  return <Ionicons name={name} color={color} size={size} />;
 }
 
